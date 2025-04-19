@@ -1,0 +1,60 @@
+﻿@page "/embedreport"
+@using PowerBIEmbededProject.Shared
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject HttpClient Http
+
+@if (reportViewModel is null)
+{
+    <label>Trying to get report info... </label>
+    <br />
+}
+@if(!string.IsNullOrEmpty(errorMessage))
+{
+    <label style="font-weight:700">Cannot embed Power BI report :</label>
+    <span>@errorMessage</span>
+}
+
+<div id="embed-container" style="height:800px"></div>
+
+@code {
+    private string errorMessage = string.Empty;
+    private IJSObjectReference? embedModule;
+    private EmbeddedReportViewModel? reportViewModel;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        try
+        {
+            if (firstRender)
+            {
+                var embedModuleTask = await JS.InvokeAsync<IJSObjectReference>("import", "./scripts/embed.js");
+                var reportViewModuleTask = Http.GetFromJsonAsync<EmbeddedReportViewModel>("api/PowerBI");
+                embedModule = embedModuleTask;
+                reportViewModel = await reportViewModuleTask;
+                StateHasChanged();
+            }
+            else if (embedModule is not null && reportViewModel is not null)
+            {
+                errorMessage = string.Empty;
+                await embedModule.InvokeVoidAsync("embedReport",
+                        "embed-container",
+                        reportViewModel.Id,
+                        reportViewModel.EmbedUrl,
+                        reportViewModel.Token);
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (embedModule is not null)
+        {
+            await embedModule.DisposeAsync();
+        }
+    }
+}
